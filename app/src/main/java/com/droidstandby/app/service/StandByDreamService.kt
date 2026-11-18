@@ -6,15 +6,27 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
+import android.hardware.SensorManager
 import android.os.BatteryManager
 import android.service.dreams.DreamService
+import android.view.OrientationEventListener
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
@@ -46,6 +58,9 @@ class StandByDreamService : DreamService(), LifecycleOwner, SavedStateRegistryOw
     private var batteryReceiver: BroadcastReceiver? = null
     private var liveBatteryInfo = mutableStateOf(BatteryInfo(100, true, "Fast AC", 25f))
 
+    private var orientationListener: OrientationEventListener? = null
+    private var deviceTiltAngle = mutableStateOf(0)
+
     override fun onCreate() {
         super.onCreate()
         savedStateRegistryController.performRestore(null)
@@ -62,16 +77,20 @@ class StandByDreamService : DreamService(), LifecycleOwner, SavedStateRegistryOw
             screenOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         }
 
+        initOrientationListener()
+
         val prefs = StandByPreferences(this)
         val composeView = ComposeView(this).apply {
             setViewTreeLifecycleOwner(this@StandByDreamService)
             setViewTreeSavedStateRegistryOwner(this@StandByDreamService)
             setContent {
                 DroidStandByTheme {
+                    val configuration = LocalConfiguration.current
+                    val isNativeLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+                    val tilt = deviceTiltAngle.value
+                    val isTiltLandscape = (tilt in 60..120) || (tilt in 240..300)
+
                     var now by remember { mutableStateOf(Date()) }
-                    var isLandscape by remember {
-                        mutableStateOf(resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE)
-                    }
                     var weatherInfo by remember { mutableStateOf(WeatherInfo(prefs.city, "--", "Loading...")) }
                     var nightMode by remember { mutableStateOf(prefs.nightModeEnabled) }
                     val accent = try {
@@ -89,7 +108,6 @@ class StandByDreamService : DreamService(), LifecycleOwner, SavedStateRegistryOw
                     LaunchedEffect(Unit) {
                         while (true) {
                             now = Date()
-                            isLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
                             delay(1000L)
                         }
                     }
@@ -98,20 +116,62 @@ class StandByDreamService : DreamService(), LifecycleOwner, SavedStateRegistryOw
                         weatherInfo = WeatherRepository.getWeather(prefs.city)
                     }
 
-                    StandByContent(
-                        now = now,
-                        battery = liveBatteryInfo.value,
-                        weather = weatherInfo,
-                        photos = prefs.getPhotoUris(),
-                        is24Hour = prefs.is24Hour,
-                        showSeconds = prefs.showSeconds,
-                        antiBurnIn = prefs.antiBurnIn,
-                        colors = colors,
-                        leftWidgetPagerState = leftPagerState,
-                        rightWidgetPagerState = rightPagerState,
-                        bigClockPagerState = bigClockPagerState,
-                        onPickPhotos = {}
-                    )
+                    if (isNativeLandscape) {
+                        // 1. System already rotated to landscape natively (Auto-Rotate ON)
+                        StandByContent(
+                            now = now,
+                            battery = liveBatteryInfo.value,
+                            weather = weatherInfo,
+                            photos = prefs.getPhotoUris(),
+                            is24Hour = prefs.is24Hour,
+                            showSeconds = prefs.showSeconds,
+                            antiBurnIn = prefs.antiBurnIn,
+                            colors = colors,
+                            leftWidgetPagerState = leftPagerState,
+                            rightWidgetPagerState = rightPagerState,
+                            bigClockPagerState = bigClockPagerState,
+                            onPickPhotos = {}
+                        )
+                    } else if (isTiltLandscape) {
+                        // 2. System window is in portrait (Auto-Rotate OFF), but phone is placed horizontally on stand!
+                        // Rotate Compose canvas 90 deg / 270 deg so StandBy fills the full horizontal physical screen!
+                        val rotationZ = if (tilt in 60..120) 270f else 90f
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(
+                                        width = configuration.screenHeightDp.dp,
+                                        height = configuration.screenWidthDp.dp
+                                    )
+                                    .graphicsLayer {
+                                        this.rotationZ = rotationZ
+                                    }
+                            ) {
+                                StandByContent(
+                                    now = now,
+                                    battery = liveBatteryInfo.value,
+                                    weather = weatherInfo,
+                                    photos = prefs.getPhotoUris(),
+                                    is24Hour = prefs.is24Hour,
+                                    showSeconds = prefs.showSeconds,
+                                    antiBurnIn = prefs.antiBurnIn,
+                                    colors = colors,
+                                    leftWidgetPagerState = leftPagerState,
+                                    rightWidgetPagerState = rightPagerState,
+                                    bigClockPagerState = bigClockPagerState,
+                                    onPickPhotos = {}
+                                )
+                            }
+                        }
+                    } else {
+                        // 3. Phone is physically upright in portrait -> show animated prompt to place in landscape
+                        RotateDevicePrompt(battery = liveBatteryInfo.value)
+                    }
                 }
             }
         }
@@ -120,6 +180,19 @@ class StandByDreamService : DreamService(), LifecycleOwner, SavedStateRegistryOw
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
         registerBatteryReceiver()
+    }
+
+    private fun initOrientationListener() {
+        orientationListener = object : OrientationEventListener(this, SensorManager.SENSOR_DELAY_UI) {
+            override fun onOrientationChanged(orientation: Int) {
+                if (orientation != ORIENTATION_UNKNOWN) {
+                    deviceTiltAngle.value = orientation
+                }
+            }
+        }
+        if (orientationListener?.canDetectOrientation() == true) {
+            orientationListener?.enable()
+        }
     }
 
     private fun registerBatteryReceiver() {
@@ -155,6 +228,7 @@ class StandByDreamService : DreamService(), LifecycleOwner, SavedStateRegistryOw
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
+        orientationListener?.disable()
         try {
             batteryReceiver?.let { unregisterReceiver(it) }
         } catch (_: Exception) {}
