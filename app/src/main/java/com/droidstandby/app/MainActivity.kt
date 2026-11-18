@@ -1,5 +1,7 @@
 package com.droidstandby.app
 
+import android.app.KeyguardManager
+import android.app.NotificationManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -14,9 +16,7 @@ import android.net.Uri
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
-import android.view.View
-import android.view.WindowInsets
-import android.view.WindowInsetsController
+import android.view.OrientationEventListener
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -26,10 +26,10 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.view.WindowCompat
@@ -40,6 +40,7 @@ import com.droidstandby.app.data.WeatherRepository
 import com.droidstandby.app.model.BatteryInfo
 import com.droidstandby.app.model.NightAccent
 import com.droidstandby.app.model.WeatherInfo
+import com.droidstandby.app.receiver.PowerConnectionReceiver
 import com.droidstandby.app.ui.StandByContent
 import com.droidstandby.app.ui.screens.AppSettingsScreen
 import com.droidstandby.app.ui.theme.DroidStandByTheme
@@ -53,21 +54,89 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private var sensorManager: SensorManager? = null
     private var lightSensor: Sensor? = null
     private var isRoomDark = mutableStateOf(false)
+    val isLandscapeState = mutableStateOf(false)
+    private var orientationListener: OrientationEventListener? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = StandByPreferences(this)
 
+        cancelChargingNotification()
         setupWindowFlags()
         hideSystemUI()
 
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as? SensorManager
         lightSensor = sensorManager?.getDefaultSensor(Sensor.TYPE_LIGHT)
 
+        handleInitialOrientation(intent)
+        initOrientationListener()
+
         setContent {
             DroidStandByTheme {
-                MainStandByScreen(prefs = prefs, isRoomDark = isRoomDark.value)
+                MainStandByScreen(
+                    prefs = prefs,
+                    isRoomDark = isRoomDark.value,
+                    isLandscapeState = isLandscapeState
+                )
             }
+        }
+    }
+
+    private fun handleInitialOrientation(intent: Intent?) {
+        val triggeredByCharging = intent?.getBooleanExtra("triggered_by_charging", false) == true
+        val km = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+        val isLocked = km?.isKeyguardLocked == true
+
+        if (triggeredByCharging || isLocked) {
+            // Bedside charging / locked wake -> always activate StandBy in landscape
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            isLandscapeState.value = true
+        } else {
+            // Normal launch: follow configuration
+            val isConfigLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+            if (isConfigLandscape) {
+                requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                isLandscapeState.value = true
+            } else {
+                requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                isLandscapeState.value = false
+            }
+        }
+    }
+
+    private fun initOrientationListener() {
+        orientationListener = object : OrientationEventListener(this, SensorManager.SENSOR_DELAY_UI) {
+            override fun onOrientationChanged(orientation: Int) {
+                if (orientation == ORIENTATION_UNKNOWN) return
+
+                // 0: portrait (top up)
+                // 90: reverse landscape (right side up)
+                // 180: reverse portrait (upside down)
+                // 270: landscape (left side up)
+                val isLandscapeTilt = (orientation in 60..120) || (orientation in 240..300)
+                val isPortraitTilt = (orientation in 0..30) || (orientation in 330..359)
+
+                if (isLandscapeTilt) {
+                    val targetOrientation = if (orientation in 60..120) {
+                        ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE
+                    } else {
+                        ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                    }
+                    if (requestedOrientation != targetOrientation) {
+                        requestedOrientation = targetOrientation
+                    }
+                    isLandscapeState.value = true
+                } else if (isPortraitTilt) {
+                    // Holding phone upright -> switch to portrait settings
+                    if (requestedOrientation != ActivityInfo.SCREEN_ORIENTATION_PORTRAIT) {
+                        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                    }
+                    isLandscapeState.value = false
+                }
+            }
+        }
+        if (orientationListener?.canDetectOrientation() == true) {
+            orientationListener?.enable()
         }
     }
 
@@ -75,28 +144,42 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         // Keep screen awake while docked on nightstand
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
-        // Show over keyguard / lock screen when plugged in
+        // Show over keyguard / lock screen when plugged in WITHOUT dismissing keyguard PIN/password
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setShowWhenLocked(true)
             setTurnScreenOn(true)
-            val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as? android.app.KeyguardManager
-            keyguardManager?.requestDismissKeyguard(this, null)
-        } else {
-            @Suppress("DEPRECATION")
-            window.addFlags(
-                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
-                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
-            )
         }
+        @Suppress("DEPRECATION")
+        window.addFlags(
+            WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+            WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+        )
+    }
+
+    private fun cancelChargingNotification() {
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+        nm?.cancel(PowerConnectionReceiver.NOTIFICATION_ID)
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        cancelChargingNotification()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setShowWhenLocked(true)
             setTurnScreenOn(true)
+        }
+        handleInitialOrientation(intent)
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        hideSystemUI()
+        if (newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            isLandscapeState.value = true
+        } else if (newConfig.orientation == Configuration.ORIENTATION_PORTRAIT) {
+            isLandscapeState.value = false
         }
     }
 
@@ -115,15 +198,23 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     override fun onResume() {
         super.onResume()
+        cancelChargingNotification()
         hideSystemUI()
         lightSensor?.let {
             sensorManager?.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL)
         }
+        orientationListener?.enable()
     }
 
     override fun onPause() {
         super.onPause()
         sensorManager?.unregisterListener(this)
+        orientationListener?.disable()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        orientationListener?.disable()
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
@@ -137,13 +228,16 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 }
 
 @Composable
-fun MainStandByScreen(prefs: StandByPreferences, isRoomDark: Boolean) {
+fun MainStandByScreen(
+    prefs: StandByPreferences,
+    isRoomDark: Boolean,
+    isLandscapeState: MutableState<Boolean>
+) {
     val context = LocalContext.current
+    val activity = context as? MainActivity
 
     var now by remember { mutableStateOf(Date()) }
-    var isLandscape by remember {
-        mutableStateOf(context.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE)
-    }
+    val isLandscape = isLandscapeState.value
 
     var batteryInfo by remember { mutableStateOf(BatteryInfo()) }
     var weatherInfo by remember { mutableStateOf(WeatherInfo(city = prefs.city)) }
@@ -225,11 +319,10 @@ fun MainStandByScreen(prefs: StandByPreferences, isRoomDark: Boolean) {
         }
     }
 
-    // Clock ticker and orientation poll
+    // Clock ticker
     LaunchedEffect(Unit) {
         while (true) {
             now = Date()
-            isLandscape = context.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
             delay(1000L)
         }
     }
@@ -257,7 +350,8 @@ fun MainStandByScreen(prefs: StandByPreferences, isRoomDark: Boolean) {
             photosCount = photosList.size,
             onPickPhotos = { photoPickerLauncher.launch(arrayOf("image/*")) },
             onPreviewStandBy = {
-                (context as? android.app.Activity)?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                activity?.isLandscapeState?.value = true
             }
         )
     } else {

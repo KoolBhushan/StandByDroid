@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.os.BatteryManager
 import android.service.dreams.DreamService
@@ -57,6 +58,10 @@ class StandByDreamService : DreamService(), LifecycleOwner, SavedStateRegistryOw
         isFullscreen = true
         isScreenBright = true
 
+        window?.attributes = window?.attributes?.apply {
+            screenOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        }
+
         val prefs = StandByPreferences(this)
         val composeView = ComposeView(this).apply {
             setViewTreeLifecycleOwner(this@StandByDreamService)
@@ -93,24 +98,20 @@ class StandByDreamService : DreamService(), LifecycleOwner, SavedStateRegistryOw
                         weatherInfo = WeatherRepository.getWeather(prefs.city)
                     }
 
-                    if (!isLandscape) {
-                        RotateDevicePrompt(battery = liveBatteryInfo.value)
-                    } else {
-                        StandByContent(
-                            now = now,
-                            battery = liveBatteryInfo.value,
-                            weather = weatherInfo,
-                            photos = prefs.getPhotoUris(),
-                            is24Hour = prefs.is24Hour,
-                            showSeconds = prefs.showSeconds,
-                            antiBurnIn = prefs.antiBurnIn,
-                            colors = colors,
-                            leftWidgetPagerState = leftPagerState,
-                            rightWidgetPagerState = rightPagerState,
-                            bigClockPagerState = bigClockPagerState,
-                            onPickPhotos = {}
-                        )
-                    }
+                    StandByContent(
+                        now = now,
+                        battery = liveBatteryInfo.value,
+                        weather = weatherInfo,
+                        photos = prefs.getPhotoUris(),
+                        is24Hour = prefs.is24Hour,
+                        showSeconds = prefs.showSeconds,
+                        antiBurnIn = prefs.antiBurnIn,
+                        colors = colors,
+                        leftWidgetPagerState = leftPagerState,
+                        rightWidgetPagerState = rightPagerState,
+                        bigClockPagerState = bigClockPagerState,
+                        onPickPhotos = {}
+                    )
                 }
             }
         }
