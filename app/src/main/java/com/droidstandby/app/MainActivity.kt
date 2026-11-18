@@ -12,7 +12,6 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
-import android.net.Uri
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
@@ -26,11 +25,11 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -42,6 +41,7 @@ import com.droidstandby.app.model.NightAccent
 import com.droidstandby.app.model.WeatherInfo
 import com.droidstandby.app.receiver.PowerConnectionReceiver
 import com.droidstandby.app.ui.StandByContent
+import com.droidstandby.app.ui.components.RotateDevicePrompt
 import com.droidstandby.app.ui.screens.AppSettingsScreen
 import com.droidstandby.app.ui.theme.DroidStandByTheme
 import com.droidstandby.app.ui.theme.getStandByColors
@@ -54,7 +54,6 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private var sensorManager: SensorManager? = null
     private var lightSensor: Sensor? = null
     private var isRoomDark = mutableStateOf(false)
-    val isLandscapeState = mutableStateOf(false)
     private var orientationListener: OrientationEventListener? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -68,38 +67,14 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as? SensorManager
         lightSensor = sensorManager?.getDefaultSensor(Sensor.TYPE_LIGHT)
 
-        handleInitialOrientation(intent)
         initOrientationListener()
 
         setContent {
             DroidStandByTheme {
                 MainStandByScreen(
                     prefs = prefs,
-                    isRoomDark = isRoomDark.value,
-                    isLandscapeState = isLandscapeState
+                    isRoomDark = isRoomDark.value
                 )
-            }
-        }
-    }
-
-    private fun handleInitialOrientation(intent: Intent?) {
-        val triggeredByCharging = intent?.getBooleanExtra("triggered_by_charging", false) == true
-        val km = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
-        val isLocked = km?.isKeyguardLocked == true
-
-        if (triggeredByCharging || isLocked) {
-            // Bedside charging / locked wake -> always activate StandBy in landscape
-            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-            isLandscapeState.value = true
-        } else {
-            // Normal launch: follow configuration
-            val isConfigLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-            if (isConfigLandscape) {
-                requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-                isLandscapeState.value = true
-            } else {
-                requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-                isLandscapeState.value = false
             }
         }
     }
@@ -125,13 +100,10 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     if (requestedOrientation != targetOrientation) {
                         requestedOrientation = targetOrientation
                     }
-                    isLandscapeState.value = true
                 } else if (isPortraitTilt) {
-                    // Holding phone upright -> switch to portrait settings
                     if (requestedOrientation != ActivityInfo.SCREEN_ORIENTATION_PORTRAIT) {
                         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
                     }
-                    isLandscapeState.value = false
                 }
             }
         }
@@ -170,17 +142,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             setShowWhenLocked(true)
             setTurnScreenOn(true)
         }
-        handleInitialOrientation(intent)
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         hideSystemUI()
-        if (newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE) {
-            isLandscapeState.value = true
-        } else if (newConfig.orientation == Configuration.ORIENTATION_PORTRAIT) {
-            isLandscapeState.value = false
-        }
     }
 
     private fun hideSystemUI() {
@@ -230,15 +196,15 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 @Composable
 fun MainStandByScreen(
     prefs: StandByPreferences,
-    isRoomDark: Boolean,
-    isLandscapeState: MutableState<Boolean>
+    isRoomDark: Boolean
 ) {
     val context = LocalContext.current
     val activity = context as? MainActivity
 
-    var now by remember { mutableStateOf(Date()) }
-    val isLandscape = isLandscapeState.value
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
+    var now by remember { mutableStateOf(Date()) }
     var batteryInfo by remember { mutableStateOf(BatteryInfo()) }
     var weatherInfo by remember { mutableStateOf(WeatherInfo(city = prefs.city)) }
 
@@ -342,18 +308,26 @@ fun MainStandByScreen(
     val colors = getStandByColors(isNightMode = nightModeActive, nightAccent = currentAccent)
 
     if (!isLandscape) {
-        // App In-Depth Customization & Settings Dashboard (in Portrait)
-        AppSettingsScreen(
-            prefs = prefs,
-            battery = batteryInfo,
-            weather = weatherInfo,
-            photosCount = photosList.size,
-            onPickPhotos = { photoPickerLauncher.launch(arrayOf("image/*")) },
-            onPreviewStandBy = {
-                activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-                activity?.isLandscapeState?.value = true
-            }
-        )
+        val km = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+        val isLocked = km?.isKeyguardLocked == true
+        val isTriggeredByCharging = (activity?.intent?.getBooleanExtra("triggered_by_charging", false) == true) && batteryInfo.isCharging
+
+        if (isLocked || isTriggeredByCharging) {
+            // Phone is locked or charging in portrait -> prompt user to place on horizontal stand
+            RotateDevicePrompt(battery = batteryInfo)
+        } else {
+            // Unlocked portrait -> in-depth settings & customization dashboard
+            AppSettingsScreen(
+                prefs = prefs,
+                battery = batteryInfo,
+                weather = weatherInfo,
+                photosCount = photosList.size,
+                onPickPhotos = { photoPickerLauncher.launch(arrayOf("image/*")) },
+                onPreviewStandBy = {
+                    activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                }
+            )
+        }
     } else {
         // Pure Screen Saver / Bedside Ambient Window (NO customization controls)
         StandByContent(
