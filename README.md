@@ -1,35 +1,30 @@
-# StandBy Droid 📱🌙
+<div align="center">
+  <img src="docs/icon.png" width="128" height="128" alt="StandBy Droid Icon" style="border-radius: 26px; box-shadow: 0 4px 12px rgba(0,0,0,0.5);" />
+  <h1>StandBy Droid 📱🌙</h1>
+  <p><b>Transform your Android phone into an ambient iOS-style StandBy bedside smart display.</b></p>
 
-[![Android](https://img.shields.io/badge/Platform-Android%208.0%2B%20(API%2026%2B)-3DDC84?logo=android&logoColor=white)](https://developer.android.com)
-[![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
-[![Jetpack Compose](https://img.shields.io/badge/UI-Jetpack%20Compose%20%2F%20Material%203-4285F4?logo=jetpackcompose&logoColor=white)](https://developer.android.com/jetpack/compose)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+  [![Android](https://img.shields.io/badge/Platform-Android%208.0%2B%20(API%2026%2B)-3DDC84?logo=android&logoColor=white)](https://developer.android.com)
+  [![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
+  [![Jetpack Compose](https://img.shields.io/badge/UI-Jetpack%20Compose%20%2F%20Material%203-4285F4?logo=jetpackcompose&logoColor=white)](https://developer.android.com/jetpack/compose)
+  [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+</div>
+
+---
+
+## 📸 Screen Saver in Action
+
+<div align="center">
+  <img src="docs/screenshot.png" width="92%" alt="StandBy Droid Live Bedside Display" style="border-radius: 12px; border: 1px solid #333;" />
+  <p><i>Live StandBy display running on Samsung Galaxy S24 Ultra: pure AMOLED pitch-black canvas, smooth sweeping analog clock, current location weather with live US AQI, enlarged monthly calendar, and battery level indicator.</i></p>
+</div>
+
+---
+
+## 💡 About StandBy Droid
 
 An open-source, high-fidelity replica of **iPhone StandBy mode** for Android devices, built natively with **Kotlin** and **Jetpack Compose (Material 3)**.
 
 When you place your Android phone horizontally on a bedside stand or wireless charger, **StandBy Droid** transforms it into an ambient smart display showing a sweeping analog clock, live local weather with AQI, monthly calendar, battery status, photo slideshows, and retro clock faces on a pure pitch-black AMOLED canvas.
-
----
-
-## 📸 Display Layout
-
-```
-+-----------------------------------------------------------------------------------+
-|                                                                     ⚡ 85%         |
-|                                                                                   |
-|         [ ANALOG CLOCK ]                     [ LOCAL WEATHER ]                    |
-|          • Sweeping Hand                      • 📍 Pune 27° Partly Cloudy         |
-|          • Hour Markers                       • H: 31°  L: 19°                    |
-|          • Circular Date                      • AQI 123 • Moderate                |
-|                                                                                   |
-|                                              [ MONTHLY CALENDAR ]                 |
-|                                               • NOVEMBER 2026                     |
-|                                               • S  M  T  W  T  F  S               |
-|                                               • [Today highlighted in accent pill]|
-|                                                                                   |
-|                                      • • •                                        |
-+-----------------------------------------------------------------------------------+
-```
 
 ---
 
@@ -135,8 +130,8 @@ To also use it as Android's official system screen saver:
 ### Build Steps
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/DroidStandBy.git
-cd DroidStandBy
+git clone https://github.com/KoolBhushan/StandByDroid.git
+cd StandByDroid
 
 # Build debug APK
 ./gradlew assembleDebug
