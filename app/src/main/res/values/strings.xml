@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">StandBy Droid</string>
+    <string name="dream_name">StandBy Screen Saver</string>
+    <string name="dream_description">iOS-style bedside StandBy display while charging</string>
+</resources>
