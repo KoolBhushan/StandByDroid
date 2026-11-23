@@ -16,6 +16,12 @@
         android:theme="@style/Theme.DroidStandBy"
         android:usesCleartextTraffic="false">
 
+        <!-- Developer & Application Metadata -->
+        <meta-data android:name="author" android:value="Bhushan Kamble" />
+        <meta-data android:name="developer" android:value="Bhushan Kamble" />
+        <meta-data android:name="developer_github" android:value="https://github.com/KoolBhushan" />
+        <meta-data android:name="app_version" android:value="1.0.0" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

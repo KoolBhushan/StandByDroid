@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PlayArrow
@@ -446,6 +447,54 @@ fun AppSettingsScreen(
             shape = RoundedCornerShape(14.dp)
         ) {
             Text("Save & Apply Settings", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // Section 9: About & Developer
+        SettingsCard(title = "ABOUT & DEVELOPER", icon = Icons.Default.Info) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "StandBy Droid",
+                    color = Color.White,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "Version 1.0.0 (Release Build)",
+                    color = Color.Gray,
+                    fontSize = 12.sp
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "Developer",
+                            color = Color(0xFF8E8E93),
+                            fontSize = 11.sp
+                        )
+                        Text(
+                            text = "Bhushan Kamble",
+                            color = Color(0xFF0A84FF),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            try {
+                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/KoolBhushan/StandByDroid")))
+                            } catch (_: Exception) {}
+                        }
+                    ) {
+                        Text("GitHub", fontSize = 12.sp)
+                    }
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(48.dp))

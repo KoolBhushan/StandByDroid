@@ -155,6 +155,14 @@ cd StandByDroid
 
 ---
 
+## 👨‍💻 Author & Developer
+
+**Bhushan Kamble**
+- **GitHub**: [@KoolBhushan](https://github.com/KoolBhushan)
+- **Repository**: [https://github.com/KoolBhushan/StandByDroid](https://github.com/KoolBhushan/StandByDroid)
+
+---
+
 ## 📄 License
 
 This project is licensed under the [MIT License](LICENSE).
