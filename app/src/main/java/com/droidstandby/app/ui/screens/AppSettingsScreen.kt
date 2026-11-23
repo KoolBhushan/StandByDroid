@@ -288,7 +288,124 @@ fun AppSettingsScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Section 7: Android System Screen Saver Shortcut
+        // Section 7: Lock Screen & Background Permissions Status
+        val pm = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+        val isBatteryUnrestricted = pm?.isIgnoringBatteryOptimizations(context.packageName) == true
+        val canDrawOverlays = Settings.canDrawOverlays(context)
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
+        val canUseFSI = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            nm?.canUseFullScreenIntent() == true
+        } else true
+
+        SettingsCard(title = "PERMISSIONS & BACKGROUND SETUP", icon = Icons.Default.Security) {
+            Text(
+                text = "Required for StandBy to wake up and display over lock screen without Developer Options:",
+                fontSize = 12.sp,
+                color = Color(0xFFB0B0B8)
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // 1. Appear on Top
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Appear on top", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (canDrawOverlays) "Granted" else "Action needed: allow drawing over lock screen",
+                        fontSize = 11.sp,
+                        color = if (canDrawOverlays) Color(0xFF34C759) else Color(0xFFFF9F0A)
+                    )
+                }
+                if (!canDrawOverlays) {
+                    OutlinedButton(onClick = {
+                        try {
+                            context.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}")))
+                        } catch (_: Exception) {
+                            context.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION))
+                        }
+                    }) {
+                        Text("Grant", fontSize = 12.sp)
+                    }
+                } else {
+                    Icon(Icons.Default.Check, contentDescription = null, tint = Color(0xFF34C759), modifier = Modifier.size(20.dp))
+                }
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp), color = Color(0xFF2C2C2E))
+
+            // 2. Battery Unrestricted
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Battery usage", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (isBatteryUnrestricted) "Unrestricted (Samsung will not kill app)" else "Action needed: set to Unrestricted",
+                        fontSize = 11.sp,
+                        color = if (isBatteryUnrestricted) Color(0xFF34C759) else Color(0xFFFF9F0A)
+                    )
+                }
+                if (!isBatteryUnrestricted) {
+                    OutlinedButton(onClick = {
+                        try {
+                            context.startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${context.packageName}")))
+                        } catch (_: Exception) {
+                            try {
+                                context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                            } catch (_: Exception) {
+                                context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")))
+                            }
+                        }
+                    }) {
+                        Text("Fix", fontSize = 12.sp)
+                    }
+                } else {
+                    Icon(Icons.Default.Check, contentDescription = null, tint = Color(0xFF34C759), modifier = Modifier.size(20.dp))
+                }
+            }
+
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp), color = Color(0xFF2C2C2E))
+
+                // 3. Full-Screen Alerts (Android 14+)
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Full-screen alerts", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            if (canUseFSI) "Allowed" else "Action needed: allow full-screen intent",
+                            fontSize = 11.sp,
+                            color = if (canUseFSI) Color(0xFF34C759) else Color(0xFFFF9F0A)
+                        )
+                    }
+                    if (!canUseFSI) {
+                        OutlinedButton(onClick = {
+                            try {
+                                context.startActivity(Intent("android.settings.MANAGE_APP_USE_FULL_SCREEN_INTENT", Uri.parse("package:${context.packageName}")))
+                            } catch (_: Exception) {
+                                context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")))
+                            }
+                        }) {
+                            Text("Allow", fontSize = 12.sp)
+                        }
+                    } else {
+                        Icon(Icons.Default.Check, contentDescription = null, tint = Color(0xFF34C759), modifier = Modifier.size(20.dp))
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Section 8: Android System Screen Saver Shortcut
         SettingsCard(title = "ANDROID SCREEN SAVER SETUP", icon = Icons.Default.Bolt) {
             Text(
                 text = "To let Android automatically activate StandBy whenever your phone charges on your nightstand:",
