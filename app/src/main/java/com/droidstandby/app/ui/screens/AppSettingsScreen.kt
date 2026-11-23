@@ -63,6 +63,7 @@ import com.droidstandby.app.data.StandByPreferences
 import com.droidstandby.app.model.BatteryInfo
 import com.droidstandby.app.model.NightAccent
 import com.droidstandby.app.model.WeatherInfo
+import com.droidstandby.app.service.StandByMonitorService
 
 @Composable
 fun AppSettingsScreen(
@@ -83,6 +84,7 @@ fun AppSettingsScreen(
     var nightMode by remember { mutableStateOf(prefs.nightModeEnabled) }
     var autoNightMode by remember { mutableStateOf(prefs.autoNightMode) }
     var antiBurnIn by remember { mutableStateOf(prefs.antiBurnIn) }
+    var autoLaunchOnCharge by remember { mutableStateOf(prefs.autoLaunchOnCharge) }
     var selectedAccent by remember {
         mutableStateOf(
             try { NightAccent.valueOf(prefs.selectedAccentName) } catch (_: Exception) { NightAccent.IOS_RED }
@@ -406,8 +408,64 @@ fun AppSettingsScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Section 8: Android System Screen Saver Shortcut
-        SettingsCard(title = "ANDROID SCREEN SAVER SETUP", icon = Icons.Default.Bolt) {
+        // Section 8: Auto-Wake on Charger & Samsung Routines
+        SettingsCard(title = "CHARGING AUTO-WAKE", icon = Icons.Default.Bolt) {
+            SettingRow(
+                label = "Auto-wake when connected to charger",
+                checked = autoLaunchOnCharge,
+                onCheckedChange = {
+                    autoLaunchOnCharge = it
+                    prefs.autoLaunchOnCharge = it
+                    if (it) {
+                        StandByMonitorService.start(context)
+                    } else {
+                        StandByMonitorService.stop(context)
+                    }
+                }
+            )
+            Text(
+                text = "Runs a zero-drain background listener that activates StandBy over your lock screen the instant power is connected (no Developer Options required).",
+                fontSize = 11.sp,
+                color = Color(0xFFB0B0B8)
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+            HorizontalDivider(color = Color(0xFF2C2C2E))
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Text(
+                text = "Samsung One UI Native Routine (Alternative)",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color(0xFF0A84FF)
+            )
+            Text(
+                text = "For 100% OS-native activation without background services, create a routine in Settings > Modes and Routines:\n• IF: Charging status = Charging AND Orientation = Landscape\n• THEN: Open StandBy Droid",
+                fontSize = 11.sp,
+                color = Color(0xFF8E8E93),
+                lineHeight = 15.sp
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            OutlinedButton(
+                onClick = {
+                    try {
+                        context.startActivity(Intent("com.samsung.android.app.routines.action.OPEN_ROUTINES"))
+                    } catch (_: Exception) {
+                        try {
+                            context.startActivity(Intent(Settings.ACTION_SETTINGS))
+                        } catch (_: Exception) {}
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Open Samsung Modes & Routines", fontSize = 12.sp)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Section 9: Android System Screen Saver Shortcut
+        SettingsCard(title = "ANDROID SCREEN SAVER SETUP", icon = Icons.Default.Schedule) {
             Text(
                 text = "To let Android automatically activate StandBy whenever your phone charges on your nightstand:",
                 fontSize = 12.sp,
@@ -439,7 +497,13 @@ fun AppSettingsScreen(
                 prefs.nightModeEnabled = nightMode
                 prefs.autoNightMode = autoNightMode
                 prefs.antiBurnIn = antiBurnIn
+                prefs.autoLaunchOnCharge = autoLaunchOnCharge
                 prefs.selectedAccentName = selectedAccent.name
+                if (autoLaunchOnCharge) {
+                    StandByMonitorService.start(context)
+                } else {
+                    StandByMonitorService.stop(context)
+                }
                 Toast.makeText(context, "Settings saved for Screen Saver!", Toast.LENGTH_SHORT).show()
             },
             modifier = Modifier.fillMaxWidth().height(52.dp),
@@ -451,7 +515,7 @@ fun AppSettingsScreen(
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // Section 9: About & Developer
+        // Section 10: About & Developer
         SettingsCard(title = "ABOUT & DEVELOPER", icon = Icons.Default.Info) {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text(

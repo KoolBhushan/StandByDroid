@@ -40,6 +40,7 @@ import com.droidstandby.app.model.BatteryInfo
 import com.droidstandby.app.model.NightAccent
 import com.droidstandby.app.model.WeatherInfo
 import com.droidstandby.app.receiver.PowerConnectionReceiver
+import com.droidstandby.app.service.StandByMonitorService
 import com.droidstandby.app.ui.StandByContent
 import com.droidstandby.app.ui.components.RotateDevicePrompt
 import com.droidstandby.app.ui.screens.AppSettingsScreen
@@ -63,6 +64,10 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         cancelChargingNotification()
         setupWindowFlags()
         hideSystemUI()
+
+        if (prefs.autoLaunchOnCharge) {
+            StandByMonitorService.start(this)
+        }
 
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as? SensorManager
         lightSensor = sensorManager?.getDefaultSensor(Sensor.TYPE_LIGHT)
